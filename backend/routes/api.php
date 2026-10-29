@@ -12,12 +12,3 @@ Route::get('/user', function (Request $request) {
 Route::get('/hello', function(){
 return ['Hello, Laravel APi']; 
 });
-// Route::get('/posts', [PostController::class, 'index']);
-// Route::get('posts/{id}', [PostController::class, 'show'])->name('show');
-Route::prefix('v1')->group(function () {
-    Route::apiResource('posts', V1PostController::class);
-});
-Route::prefix('v2')->group(function () {
-    Route::apiResource('posts', V2PostController::class);
-});
-// Route::apiResource('posts', PostController::class);
