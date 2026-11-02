@@ -15,6 +15,7 @@ class Comment extends Model
         'user_id',
         'article_id',
         'content',
+        'parent_id', // Ne pas oublier de l'ajouter ici
     ];
 
     public function user(): BelongsTo
@@ -25,5 +26,18 @@ class Comment extends Model
     public function article(): BelongsTo
     {
         return $this->belongsTo(Article::class);
+    }
+
+    // Relation vers le commentaire parent (s'il s'agit d'une réponse)
+    public function parent()
+    {
+        return $this->belongsTo(Comment::class, 'parent_id');
+    }
+
+    // Relation vers les réponses enfants
+    public function replies()
+    {
+        return $this->hasMany(Comment::class, 'parent_id')->with('user', 'replies'); 
+        // Note: Le 'with' en cascade permet de charger les sous-réponses automatiquement si besoin
     }
 }

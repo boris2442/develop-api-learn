@@ -1,14 +1,43 @@
 <?php
 
 
-use App\Http\Controllers\Api\V1\PostController as V1PostController;
-use App\Http\Controllers\Api\V2\PostController as V2PostController;
+use App\Http\Controllers\Api\V1\ArticleController;
+use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\CategoryController;
+use App\Http\Controllers\Api\V1\CommentController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
-Route::get('/hello', function(){
-return ['Hello, Laravel APi']; 
+
+
+// Routes publiques (Accessibles sans être connecté)
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
+
+// Routes protégées par Sanctum (Nécessite le token Bearer)
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/user', [AuthController::class, 'user']);
 });
+
+
+
+
+
+
+
+
+
+
+Route::get('/articles', [ArticleController::class, 'index']);
+// Route pour afficher un article unique via son slug
+// Route pour créer un nouvel article
+Route::post('/articles', [ArticleController::class, 'store']);
+//Route::get('/articles/create', [ArticleController::class, 'create']);
+Route::get('/articles/{article:slug}', [ArticleController::class, 'show']);
+Route::put('/articles/{article:slug}', [ArticleController::class, 'update']);
+Route::get('/categories', [CategoryController::class, 'index']);
+Route::post('/articles/{article}/comments', [CommentController::class, 'store']);

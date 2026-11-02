@@ -1,35 +1,70 @@
 @import './base.css';
-
+/* @import "tailwindcss"; */
 #app {
-  max-width: 1280px;
+  /* max-width: 1280px; */
   margin: 0 auto;
   padding: 2rem;
   font-weight: normal;
 }
 
-a,
-.green {
-  text-decoration: none;
-  color: hsla(160, 100%, 37%, 1);
-  transition: 0.4s;
-  padding: 3px;
+
+
+/* --- Mode Clair (Par défaut) --- */
+:root {
+  /* Couleurs Primaires & Accents */
+  --color-primary: #4f46e5;        /* Indigo principal */
+  --color-primary-hover: #4338ca;  /* Indigo foncé (hover) */
+  --color-primary-light: #eef2ff;  /* Indigo très clair */
+
+  /* Neutres & Fonds */
+  --color-bg: #f8fafc;             /* Fond global de l'application (Slate 50) */
+  --color-surface: #ffffff;        /* Fond des cartes, modales et navbar */
+  --color-border: #e2e8f0;         /* Bordures subtiles (Slate 200) */
+  --color-border-hover: #cbd5e1;   /* Bordures au survol */
+
+  /* Typographie */
+  --color-text-main: #0f172a;      /* Texte principal très foncé (Slate 900) */
+  --color-text-muted: #475569;     /* Texte secondaire / descriptions */
+  --color-text-light: #94a3b8;     /* Texte désactivé / placeholders */
+
+  /* Sémantique / États */
+  --color-success: #10b981;        
+  --color-danger: #ef4444;         
+  --color-danger-bg: #fef2f2;      
+
+  /* Ombres & Rayons de bordure */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
 }
 
-@media (hover: hover) {
-  a:hover {
-    background-color: hsla(160, 100%, 37%, 0.2);
-  }
-}
+/* --- Mode Sombre (Dark Mode) --- */
+/* S'applique automatiquement si la classe .dark est présente sur l'élément <html> ou <body> */
+.dark {
+  /* Couleurs Primaires & Accents (légèrement plus lumineuses pour le dark mode) */
+  --color-primary: #6366f1;        /* Indigo 500 */
+  --color-primary-hover: #818cf8;  /* Indigo 400 */
+  --color-primary-light: #312e81;  /* Indigo très sombre */
 
-@media (min-width: 1024px) {
-  body {
-    display: flex;
-    place-items: center;
-  }
+  /* Neutres & Fonds */
+  --color-bg: #0f172a;             /* Fond global très sombre (Slate 900) */
+  --color-surface: #1e293b;        /* Fond des cartes / navbar (Slate 800) */
+  --color-border: #334155;         /* Bordures sombres (Slate 700) */
+  --color-border-hover: #475569;   /* Bordures au survol (Slate 600) */
 
-  #app {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    padding: 0 2rem;
-  }
+  /* Typographie */
+  --color-text-main: #f8fafc;      /* Texte principal très clair (Slate 50) */
+  --color-text-muted: #94a3b8;     /* Texte secondaire (Slate 400) */
+  --color-text-light: #64748b;     /* Texte désactivé (Slate 500) */
+
+  /* Sémantique / États */
+  --color-success: #34d399;        
+  --color-danger: #f87171;         
+  --color-danger-bg: #450a0a;      
+
+  /* Ombres adaptées au sombre */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.5);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
 }
