@@ -18,6 +18,7 @@ class ArticleController
         $articles = Article::with(['user', 'category'])
             ->withCount('comments')
             ->inRandomOrder()
+            // ->orderByRaw('CRC32(CONCAT(id, ?))', ['nexora-feed'])
             ->paginate(10);
 
      return ArticleResource::collection($articles);

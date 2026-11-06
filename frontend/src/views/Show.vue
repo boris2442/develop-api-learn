@@ -1,432 +1,721 @@
 <script setup>
-import { ref, onMounted, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useAuthStore } from "../stores/authStore";
 import apiClient from "../api/index.js";
+import ReactionPicker from "@/components/ReactionPicker.vue";
+import {
+  ArrowLeft,
+  MoreHorizontal,
+  Share2,
+  Copy,
+  Pencil,
+  Trash2,
+  Bookmark,
+  MessageCircle,
+  Send,
+  CornerDownRight,
+  LoaderCircle,
+  RefreshCw,
+  CalendarDays,
+  Flag,
+  X,
+  Check,
+} from "@lucide/vue";
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
 
 const article = ref(null);
 const loading = ref(true);
-const error = ref(null);
-
-// États pour la gestion du nouveau commentaire
+const error = ref("");
+const activeMenu = ref(null);
+const copied = ref(false);
 const newCommentContent = ref("");
 const submittingComment = ref(false);
 const commentError = ref("");
+const replyingToId = ref(null);
+const replyContent = ref("");
+const submittingReply = ref(false);
+const replyError = ref("");
+const deleting = ref(false);
+const savedArticles = ref(new Set());
+
+const currentUserId = computed(() => authStore.user?.id);
+const authorName = computed(
+  () => article.value?.user?.name ?? "Auteur inconnu",
+);
+const commentsCount = computed(
+  () => article.value?.comments_count ?? article.value?.comments?.length ?? 0,
+);
+const isAuthor = computed(() =>
+  Boolean(
+    currentUserId.value && article.value?.user?.id === currentUserId.value,
+  ),
+);
+const isSaved = computed(
+  () => article.value && savedArticles.value.has(article.value.id),
+);
+
+const initials = (name) =>
+  (name || "Utilisateur")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase())
+    .join("");
+const formatDate = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+};
 
 const fetchArticle = async () => {
   loading.value = true;
-  error.value = null;
-
+  error.value = "";
+  activeMenu.value = null;
   try {
-    const slug = route.params.slug;
-    const response = await apiClient.get(`/api/articles/${slug}`);
+    const response = await apiClient.get(`/api/articles/${route.params.slug}`);
     article.value = response.data.data ?? response.data;
   } catch (err) {
     console.error(err);
-    error.value = "Impossible de charger cet article.";
+    error.value =
+      "Impossible de charger cette publication. Vérifiez votre connexion puis réessayez.";
   } finally {
     loading.value = false;
   }
 };
 
-// Fonction pour soumettre le commentaire
-const submitComment = async () => {
-  if (!newCommentContent.value.trim() || !article.value) return;
+const closeMenus = (event) => {
+  if (!event.target.closest("[data-action-menu]")) activeMenu.value = null;
+};
+const toggleMenu = (key) => {
+  activeMenu.value = activeMenu.value === key ? null : key;
+};
 
+const copyLink = async () => {
+  try {
+    await navigator.clipboard.writeText(window.location.href);
+    copied.value = true;
+    activeMenu.value = null;
+    window.setTimeout(() => {
+      copied.value = false;
+    }, 1800);
+  } catch (err) {
+    console.error(err);
+    window.prompt(
+      "Copiez le lien de cette publication :",
+      window.location.href,
+    );
+  }
+};
+
+const shareArticle = async () => {
+  activeMenu.value = null;
+  try {
+    if (navigator.share) {
+      await navigator.share({
+        title: article.value?.title ?? "Publication NEXORA",
+        url: window.location.href,
+      });
+    } else {
+      await copyLink();
+    }
+  } catch (err) {
+    if (err?.name !== "AbortError") console.error(err);
+  }
+};
+
+const editArticle = () => {
+  activeMenu.value = null;
+  router.push({ name: "EditArticle", params: { slug: article.value.slug } });
+};
+
+const deleteArticle = async () => {
+  if (!article.value || deleting.value) return;
+  const confirmed = window.confirm(
+    "Voulez-vous vraiment supprimer cette publication ? Cette action est irréversible.",
+  );
+  if (!confirmed) return;
+  deleting.value = true;
+  try {
+    await apiClient.delete(`/api/articles/${article.value.id}`);
+    activeMenu.value = null;
+    router.push("/");
+  } catch (err) {
+    console.error(err);
+    window.alert(
+      "La suppression a échoué. Vérifiez que la route DELETE /api/articles/{id} est disponible et que vous êtes autorisé à supprimer cette publication.",
+    );
+  } finally {
+    deleting.value = false;
+  }
+};
+
+const toggleSave = () => {
+  if (!article.value) return;
+  const next = new Set(savedArticles.value);
+  next.has(article.value.id)
+    ? next.delete(article.value.id)
+    : next.add(article.value.id);
+  savedArticles.value = next;
+  activeMenu.value = null;
+};
+
+const submitComment = async () => {
+  const content = newCommentContent.value.trim();
+  if (!content || !article.value || submittingComment.value) return;
   submittingComment.value = true;
   commentError.value = "";
-
   try {
     const response = await apiClient.post(
       `/api/articles/${article.value.id}/comments`,
-      {
-        content: newCommentContent.value,
-      },
+      { content },
     );
-
-    const newComment = response.data.data ?? response.data;
-
-    // S'assurer que le tableau des commentaires existe
-    if (!article.value.comments) {
-      article.value.comments = [];
-    }
-
-    // Ajouter le commentaire tout en haut de la liste
-    article.value.comments.unshift(newComment);
-
-    // Incrémenter le compteur de commentaires s'il existe
-    if (typeof article.value.comments_count === "number") {
+    const comment = response.data.data ?? response.data;
+    if (!article.value.comments) article.value.comments = [];
+    article.value.comments.unshift(comment);
+    if (typeof article.value.comments_count === "number")
       article.value.comments_count++;
-    }
-
-    // Réinitialiser le champ
     newCommentContent.value = "";
   } catch (err) {
     console.error(err);
-    commentError.value = "Impossible d'ajouter le commentaire.";
+    commentError.value = "Impossible de publier le commentaire. Réessayez.";
   } finally {
     submittingComment.value = false;
   }
 };
 
-// Suivi du commentaire auquel l'utilisateur est en train de répondre (contient l'ID du commentaire parent)
-const replyingToId = ref(null);
-const replyContent = ref("");
-const submittingReply = ref(false);
-const replyError = ref("");
-
-// Fonction pour envoyer une réponse
 const submitReply = async (parentId) => {
-  if (!replyContent.value.trim() || !article.value) return;
-
+  const content = replyContent.value.trim();
+  if (!content || !article.value || submittingReply.value) return;
   submittingReply.value = true;
   replyError.value = "";
-
   try {
     const response = await apiClient.post(
       `/api/articles/${article.value.id}/comments`,
-      {
-        content: replyContent.value,
-        parent_id: parentId, // On transmet l'ID du commentaire parent
-      },
+      { content, parent_id: parentId },
     );
-
-    const newReply = response.data.data ?? response.data;
-
-    // Trouver le commentaire parent dans notre liste pour lui ajouter la réponse
-    const parentComment = article.value.comments.find((c) => c.id === parentId);
-    if (parentComment) {
-      if (!parentComment.replies) {
-        parentComment.replies = [];
-      }
-      parentComment.replies.push(newReply);
+    const reply = response.data.data ?? response.data;
+    const parent = article.value.comments?.find(
+      (comment) => comment.id === parentId,
+    );
+    if (parent) {
+      if (!parent.replies) parent.replies = [];
+      parent.replies.push(reply);
     }
-
-    // Incrémenter le compteur global de commentaires
-    if (typeof article.value.comments_count === "number") {
+    if (typeof article.value.comments_count === "number")
       article.value.comments_count++;
-    }
-
-    // Réinitialiser le formulaire de réponse
     replyContent.value = "";
     replyingToId.value = null;
   } catch (err) {
     console.error(err);
-    replyError.value = "Impossible d'envoyer la réponse.";
+    replyError.value = "Impossible d'envoyer la réponse. Réessayez.";
   } finally {
     submittingReply.value = false;
   }
 };
 
-onMounted(fetchArticle);
+const goBack = () => {
+  if (window.history.length > 1) router.back();
+  else router.push("/");
+};
 
-// Recharge l'article si le slug change
+onMounted(() => {
+  fetchArticle();
+  document.addEventListener("click", closeMenus);
+});
+onUnmounted(() => document.removeEventListener("click", closeMenus));
 watch(() => route.params.slug, fetchArticle);
 </script>
 
 <template>
-  <main class="min-h-screen bg-slate-100 py-10 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-3xl mx-auto">
-      <!-- Bouton de retour -->
-      <button
-        @click="router.back()"
-        class="mb-6 inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-800 transition"
-      >
-        <svg
-          class="w-4 h-4 mr-2"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M10 19l-7-7m0 0l7-7m-7 7h18"
-          />
-        </svg>
-        Retour aux articles
-      </button>
-
-      <!-- Chargement -->
-      <div v-if="loading" class="py-20 text-center text-slate-500 font-medium">
-        Chargement de l'article...
-      </div>
-
-      <!-- Erreur -->
-      <div
-        v-else-if="error"
-        class="rounded-xl border border-red-200 bg-red-50 p-6 text-center text-red-700"
-      >
-        <p>{{ error }}</p>
+  <main class="min-h-screen bg-bg pb-12 pt-[190px] text-text-main">
+    <!-- Barre de lecture persistante : retour à gauche, auteur et menu à droite -->
+    <header
+      class="fixed inset-x-0 top-[122px] z-40 border-b border-border bg-surface/95 shadow-sm backdrop-blur-xl"
+    >
+      <div class="flex h-[68px] w-full items-center gap-3 px-3 sm:px-6">
+        <!-- Retour -->
         <button
-          @click="fetchArticle"
-          class="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition"
+          type="button"
+          @click="goBack"
+          aria-label="Retour"
+          class="flex size-10 shrink-0 items-center justify-center rounded-full text-text-main transition hover:bg-bg"
         >
-          Réessayer
+          <ArrowLeft :size="21" />
         </button>
-      </div>
 
-      <!-- Contenu de l'article -->
-      <article
-        v-else-if="article"
-        class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
-      >
-        <!-- En-tête de l'article -->
-        <div class="p-6 sm:p-8 pb-4 border-b border-slate-100">
-          <span
-            class="inline-block px-3 py-1 mb-3 text-xs font-semibold uppercase tracking-wider bg-indigo-50 text-indigo-600 rounded-full"
-          >
-            {{ article.category?.name ?? "Général" }}
-          </span>
-
-          <h1
-            class="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-snug mb-4"
-          >
-            {{ article.title }}
-          </h1>
-
+        <!-- Auteur -->
+        <div v-if="article" class="ml-3 flex min-w-0 items-center gap-2">
           <div
-            class="flex items-center justify-between gap-4 text-sm text-slate-500"
+            class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-light text-xs font-bold text-primary"
           >
-            <div class="flex items-center space-x-3">
-              <div
-                class="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold"
-              >
-                {{ (article.user?.name ?? "A")[0].toUpperCase() }}
-              </div>
+            <img
+              v-if="article.user?.image"
+              :src="article.user.image"
+              :alt="authorName"
+              class="h-full w-full object-cover"
+            />
+            <span v-else>{{ initials(authorName) }}</span>
+          </div>
 
-              <div>
-                <p class="font-semibold text-slate-800">
-                  {{ article.user?.name ?? "Auteur inconnu" }}
-                </p>
-
-                <p class="text-xs text-slate-400">
-                  Publié le
-                  {{ new Date(article.created_at).toLocaleDateString() }}
-                </p>
-              </div>
-            </div>
-
-            <button
-              @click="
-                router.push({
-                  name: 'EditArticle',
-                  params: { slug: article.slug },
-                })
-              "
-              class="px-4 py-2 rounded-lg bg-indigo-50 text-indigo-600 font-semibold hover:bg-indigo-100 transition"
-            >
-              Modifier
-            </button>
+          <div class="min-w-0">
+            <p class="truncate text-sm font-semibold">{{ authorName }}</p>
+            <p class="text-[11px] text-text-muted">Auteur</p>
           </div>
         </div>
 
-        <!-- Image principale -->
-        <div
-          v-if="article.image"
-          class="w-full bg-slate-100 max-h-[450px] overflow-hidden"
-        >
-          <img
-            :src="article.image"
-            :alt="article.title"
-            class="w-full h-full object-cover"
-          />
-        </div>
-
-        <!-- Corps du texte -->
-        <div
-          class="p-6 sm:p-8 text-slate-700 leading-relaxed space-y-4 whitespace-pre-line text-base"
-        >
-          {{ article.content }}
-        </div>
-
-        <!-- Section Commentaires -->
-        <section class="border-t border-slate-100 bg-slate-50 p-6 sm:p-8">
-          <h2
-            class="text-lg font-bold text-slate-900 mb-6 flex items-center justify-between"
+        <!-- Actions complètement à droite -->
+        <!-- <div v-if="article" class="relative ml-auto shrink-0" data-action-menu>
+          <button
+            type="button"
+            @click.stop="toggleMenu('header')"
+            aria-label="Actions de la publication"
+            class="flex size-10 items-center justify-end rounded-full text-text-muted transition hover:bg-bg hover:text-text-main"
           >
-            <span>Commentaires</span>
-            <span
-              class="text-sm font-normal text-slate-500 bg-slate-200 px-2.5 py-0.5 rounded-full"
-            >
-              {{ article.comments_count ?? article.comments?.length ?? 0 }}
-            </span>
-          </h2>
+            <MoreHorizontal :size="23" />
+          </button>
 
-          <!-- Formulaire d'ajout de commentaire (Décommenté et activé) -->
-          <div class="mb-8 flex gap-3">
+          <div
+            v-if="activeMenu === 'header'"
+            class="absolute right-0 top-12 z-50 w-60 overflow-hidden rounded-xl border border-border bg-surface p-1.5 shadow-xl"
+          >
+            <button @click="shareArticle" class="menu-action">
+              <Share2 :size="17" /> Partager
+            </button>
+
+            <button @click="copyLink" class="menu-action">
+              <Copy :size="17" /> Copier le lien
+            </button>
+
+            <button @click="toggleSave" class="menu-action">
+              <Bookmark :size="17" />
+              {{ isSaved ? "Retirer des enregistrements" : "Enregistrer" }}
+            </button>
+
+            <template v-if="isAuthor">
+              <div class="my-1 border-t border-border"></div>
+
+              <button @click="editArticle" class="menu-action">
+                <Pencil :size="17" /> Modifier la publication
+              </button>
+
+              <button
+                @click="deleteArticle"
+                :disabled="deleting"
+                class="menu-action text-danger hover:bg-danger-bg"
+              >
+                <LoaderCircle v-if="deleting" :size="17" class="animate-spin" />
+                <Trash2 v-else :size="17" />
+                Supprimer la publication
+              </button>
+            </template>
+
+            <button v-else class="menu-action">
+              <Flag :size="17" /> Signaler
+            </button>
+          </div>
+        </div> -->
+      </div>
+    </header>
+
+    <div class="mx-auto max-w-3xl px-3 sm:px-6">
+      <div
+        v-if="loading"
+        class="flex min-h-[360px] flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-surface"
+      >
+        <LoaderCircle :size="30" class="animate-spin text-primary" />
+        <p class="text-sm text-text-muted">Chargement de la publication...</p>
+      </div>
+
+      <div
+        v-else-if="error"
+        class="rounded-2xl border border-border bg-surface px-6 py-12 text-center shadow-sm"
+      >
+        <div
+          class="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-bg text-text-muted"
+        >
+          <RefreshCw :size="22" />
+        </div>
+        <h2 class="font-bold">Publication indisponible</h2>
+        <p class="mx-auto mt-2 max-w-md text-sm leading-6 text-text-muted">
+          {{ error }}
+        </p>
+        <button
+          @click="fetchArticle"
+          class="mt-5 inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-hover"
+        >
+          <RefreshCw :size="16" />Réessayer
+        </button>
+      </div>
+
+      <template v-else-if="article">
+        <article
+          class="overflow-visible rounded-2xl border border-border bg-surface shadow-sm"
+        >
+          <!-- Auteur et menu contextuel façon réseau social -->
+          <div class="flex items-center gap-3 px-4 pb-3 pt-4 sm:px-6">
             <div
-              class="w-8 h-8 rounded-full bg-slate-300 flex-shrink-0 flex items-center justify-center font-bold text-slate-700 text-xs"
+              class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-light text-sm font-bold text-primary"
             >
-              Moi
+              <img
+                v-if="article.user?.image"
+                :src="article.user.image"
+                :alt="authorName"
+                class="h-full w-full object-cover"
+              />
+              <span v-else>{{ initials(authorName) }}</span>
             </div>
-
-            <div class="flex-grow">
-              <textarea
-                v-model="newCommentContent"
-                rows="2"
-                placeholder="Ajouter un commentaire..."
-                class="w-full rounded-xl border border-slate-300 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-              ></textarea>
-
-              <p v-if="commentError" class="text-red-500 text-xs mt-1">
-                {{ commentError }}
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-bold">{{ authorName }}</p>
+              <p
+                class="flex flex-wrap items-center gap-1.5 text-xs text-text-muted"
+              >
+                <span>{{ formatDate(article.created_at) }}</span
+                ><span aria-hidden="true">·</span
+                ><span>{{ article.category?.name ?? "Général" }}</span>
               </p>
-
-              <div class="mt-2 flex justify-end">
-                <button
-                  @click="submitComment"
-                  :disabled="!newCommentContent.trim() || submittingComment"
-                  class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                >
-                  {{ submittingComment ? "Envoi..." : "Commenter" }}
+            </div>
+            <div class="relative" data-action-menu>
+              <button
+                type="button"
+                @click.stop="toggleMenu('article')"
+                aria-label="Plus d'options"
+                class="flex size-10 items-center justify-center rounded-full text-text-muted transition hover:bg-bg hover:text-text-main"
+              >
+                <MoreHorizontal :size="23" />
+              </button>
+              <div
+                v-if="activeMenu === 'article'"
+                class="absolute right-0 top-11 z-30 w-60 overflow-hidden rounded-xl border border-border bg-surface p-1.5 shadow-xl"
+              >
+                <button @click="shareArticle" class="menu-action">
+                  <Share2 :size="17" />Partager
+                </button>
+                <button @click="copyLink" class="menu-action">
+                  <Copy :size="17" />Copier le lien
+                </button>
+                <button @click="toggleSave" class="menu-action">
+                  <Bookmark :size="17" />{{
+                    isSaved ? "Retirer des enregistrements" : "Enregistrer"
+                  }}
+                </button>
+                <template v-if="isAuthor">
+                  <div class="my-1 border-t border-border"></div>
+                  <button @click="editArticle" class="menu-action">
+                    <Pencil :size="17" />Modifier la publication
+                  </button>
+                  <button
+                    @click="deleteArticle"
+                    :disabled="deleting"
+                    class="menu-action text-danger hover:bg-danger-bg"
+                  >
+                    <LoaderCircle
+                      v-if="deleting"
+                      :size="17"
+                      class="animate-spin"
+                    /><Trash2 v-else :size="17" />Supprimer la publication
+                  </button>
+                </template>
+                <button v-else class="menu-action">
+                  <Flag :size="17" />Signaler
                 </button>
               </div>
             </div>
           </div>
 
-          <!-- Liste des commentaires -->
-          <!-- <div
-            v-if="article.comments && article.comments.length > 0"
-            class="space-y-4"
-          >
-            <div
-              v-for="comment in article.comments"
-              :key="comment.id"
-              class="flex space-x-3 bg-white p-4 rounded-xl border border-slate-200/60 shadow-xs"
+          <div class="px-4 pb-4 sm:px-6">
+            <h1
+              class="mb-3 text-xl font-extrabold leading-snug tracking-tight sm:text-2xl"
             >
-              <div
-                class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex-shrink-0 flex items-center justify-center font-bold text-xs"
-              >
-                {{ (comment.user?.name ?? "U")[0].toUpperCase() }}
-              </div>
-              <div class="flex-grow">
-                <div class="flex items-center justify-between mb-1">
-                  <span class="text-sm font-semibold text-slate-900">{{
-                    comment.user?.name ?? "Utilisateur"
-                  }}</span>
-                  <span class="text-xs text-slate-400">{{
-                    new Date(comment.created_at).toLocaleDateString()
-                  }}</span>
-                </div>
-                <p class="text-sm text-slate-600">{{ comment.content }}</p>
-              </div>
-            </div>
-          </div> -->
-
-          <!-- Liste des commentaires -->
-          <div
-            v-if="article.comments && article.comments.length > 0"
-            class="space-y-6"
-          >
-            <div
-              v-for="comment in article.comments"
-              :key="comment.id"
-              class="bg-white p-4 rounded-xl border border-slate-200/60 shadow-xs space-y-3"
+              {{ article.title }}
+            </h1>
+            <p
+              class="whitespace-pre-line break-words text-[15px] leading-7 text-text-main sm:text-base"
             >
-              <!-- Commentaire principal -->
-              <div class="flex space-x-3">
-                <div
-                  class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex-shrink-0 flex items-center justify-center font-bold text-xs"
-                >
-                  {{ (comment.user?.name ?? "U")[0].toUpperCase() }}
-                </div>
-                <div class="flex-grow">
-                  <div class="flex items-center justify-between mb-1">
-                    <span class="text-sm font-semibold text-slate-900">
-                      {{ comment.user?.name ?? "Utilisateur" }}
-                    </span>
-                    <span class="text-xs text-slate-400">
-                      {{ new Date(comment.created_at).toLocaleDateString() }}
-                    </span>
-                  </div>
-                  <p class="text-sm text-slate-600">{{ comment.content }}</p>
-
-                  <!-- Bouton pour déclencher l'affichage du champ de réponse -->
-                  <button
-                    @click="
-                      replyingToId =
-                        replyingToId === comment.id ? null : comment.id
-                    "
-                    class="mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition"
-                  >
-                    Répondre
-                  </button>
-                </div>
-              </div>
-
-              <!-- Champ de saisie de la réponse (S'affiche uniquement si on clique sur Répondre de ce commentaire) -->
-              <div
-                v-if="replyingToId === comment.id"
-                class="ml-11 mt-3 pl-3 border-l-2 border-indigo-100"
-              >
-                <textarea
-                  v-model="replyContent"
-                  rows="2"
-                  placeholder="Écrire une réponse..."
-                  class="w-full rounded-lg border border-slate-300 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                ></textarea>
-
-                <p v-if="replyError" class="text-red-500 text-xs mt-1">
-                  {{ replyError }}
-                </p>
-
-                <div class="mt-2 flex justify-end space-x-2">
-                  <button
-                    @click="replyingToId = null"
-                    class="px-3 py-1.5 bg-slate-200 text-slate-700 text-xs font-medium rounded-lg hover:bg-slate-300 transition"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    @click="submitReply(comment.id)"
-                    :disabled="!replyContent.trim() || submittingReply"
-                    class="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition"
-                  >
-                    {{ submittingReply ? "Envoi..." : "Répondre" }}
-                  </button>
-                </div>
-              </div>
-
-              <!-- Affichage des sous-réponses (Fils de discussion) -->
-              <div
-                v-if="comment.replies && comment.replies.length > 0"
-                class="ml-11 space-y-3 pt-3 border-t border-slate-100"
-              >
-                <div
-                  v-for="reply in comment.replies"
-                  :key="reply.id"
-                  class="flex space-x-3 bg-slate-50 p-3 rounded-lg border border-slate-200/40"
-                >
-                  <div
-                    class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex-shrink-0 flex items-center justify-center font-bold text-xs"
-                  >
-                    {{ (reply.user?.name ?? "U")[0].toUpperCase() }}
-                  </div>
-                  <div class="flex-grow">
-                    <div class="flex items-center justify-between mb-1">
-                      <span class="text-xs font-semibold text-slate-900">
-                        {{ reply.user?.name ?? "Utilisateur" }}
-                      </span>
-                      <span class="text-xs text-slate-400">
-                        {{ new Date(reply.created_at).toLocaleDateString() }}
-                      </span>
-                    </div>
-                    <p class="text-xs text-slate-600">{{ reply.content }}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+              {{ article.content }}
+            </p>
           </div>
 
-          <div v-else class="text-center py-8 text-slate-400 text-sm">
-            Aucun commentaire pour le moment. Soyez le premier à réagir !
+          <div v-if="article.image" class="max-h-[620px] overflow-hidden bg-bg">
+            <img
+              :src="article.image"
+              :alt="article.title"
+              class="mx-auto max-h-[620px] w-full object-contain"
+            />
+          </div>
+
+          <div
+            class="mx-4 flex items-center justify-between border-b border-border px-1 py-3 text-xs text-text-muted sm:mx-6"
+          >
+            <span
+              >{{ commentsCount }} commentaire{{
+                commentsCount === 1 ? "" : "s"
+              }}</span
+            >
+            <span
+              v-if="copied"
+              class="inline-flex items-center gap-1 text-primary"
+              ><Check :size="14" />Lien copié</span
+            >
+          </div>
+          <div class="mx-3 grid grid-cols-3 gap-1 py-1 sm:mx-5">
+             <!-- Appel du composant ReactionPicker -->
+            <ReactionPicker 
+              v-model="userReaction" 
+              @react="handleReactionChange" 
+            />
+            <button
+              type="button"
+              @click="document.getElementById('comment-composer')?.focus()"
+              class="flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold text-text-muted transition hover:bg-bg hover:text-primary"
+            >
+              <MessageCircle :size="19" />Commenter
+            </button>
+
+           
+            <button
+              type="button"
+              @click="shareArticle"
+              class="flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold text-text-muted transition hover:bg-bg hover:text-primary"
+            >
+              <Share2 :size="19" />Partager
+            </button>
+          </div>
+        </article>
+
+        <!-- Espace de discussion -->
+        <section
+          class="mt-4 rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-6"
+        >
+          <div class="mb-5 flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-extrabold">Commentaires</h2>
+              <p class="mt-0.5 text-xs text-text-muted">
+                La discussion continue ici.
+              </p>
+            </div>
+            <span
+              class="rounded-full bg-bg px-3 py-1 text-xs font-bold tabular-nums text-text-muted"
+              >{{ commentsCount }}</span
+            >
+          </div>
+
+          <form @submit.prevent="submitComment" class="mb-6">
+            <div class="flex gap-3">
+              <div
+                class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-light text-xs font-bold text-primary"
+              >
+                <img
+                  v-if="authStore.user?.image"
+                  :src="authStore.user.image"
+                  :alt="authStore.user.name"
+                  class="h-full w-full object-cover"
+                />
+                <span v-else>{{ initials(authStore.user?.name) }}</span>
+              </div>
+              <div class="min-w-0 flex-1">
+                <textarea
+                  id="comment-composer"
+                  v-model="newCommentContent"
+                  rows="2"
+                  maxlength="2000"
+                  placeholder="Écrivez un commentaire..."
+                  class="w-full resize-none rounded-2xl border border-border bg-bg px-4 py-3 text-sm leading-6 outline-none transition placeholder:text-text-muted focus:border-primary focus:ring-2 focus:ring-primary/10"
+                ></textarea>
+                <p v-if="commentError" class="mt-2 text-xs text-danger">
+                  {{ commentError }}
+                </p>
+                <div class="mt-2 flex justify-end">
+                  <button
+                    type="submit"
+                    :disabled="!newCommentContent.trim() || submittingComment"
+                    class="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-bold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <LoaderCircle
+                      v-if="submittingComment"
+                      :size="15"
+                      class="animate-spin"
+                    /><Send v-else :size="14" />{{
+                      submittingComment ? "Envoi..." : "Commenter"
+                    }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </form>
+
+          <div class="space-y-5 border-t border-border pt-5">
+            <div v-if="article.comments?.length">
+              <div
+                v-for="comment in article.comments"
+                :key="comment.id"
+                class="flex gap-2.5"
+              >
+                <div
+                  class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-light text-xs font-bold text-primary"
+                >
+                  <img
+                    v-if="comment.user?.image"
+                    :src="comment.user.image"
+                    :alt="comment.user?.name"
+                    class="h-full w-full object-cover"
+                  />
+                  <span v-else>{{ initials(comment.user?.name) }}</span>
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div
+                    class="inline-block max-w-full rounded-2xl bg-bg px-4 py-3"
+                  >
+                    <p class="mb-1 text-xs font-bold">
+                      {{ comment.user?.name ?? "Utilisateur" }}
+                    </p>
+                    <p
+                      class="whitespace-pre-line break-words text-sm leading-6"
+                    >
+                      {{ comment.content }}
+                    </p>
+                  </div>
+                  <div
+                    class="mt-1 flex items-center gap-3 px-2 text-[11px] text-text-muted"
+                  >
+                    <time>{{ formatDate(comment.created_at) }}</time>
+                    <button
+                      type="button"
+                      @click="
+                        replyingToId =
+                          replyingToId === comment.id ? null : comment.id;
+                        replyContent = '';
+                        replyError = '';
+                      "
+                      class="font-bold transition hover:text-primary"
+                    >
+                      {{ replyingToId === comment.id ? "Annuler" : "Répondre" }}
+                    </button>
+                    <span v-if="comment.replies?.length"
+                      >{{ comment.replies.length }} réponse(s)</span
+                    >
+                  </div>
+
+                  <form
+                    v-if="replyingToId === comment.id"
+                    @submit.prevent="submitReply(comment.id)"
+                    class="mt-3 flex gap-2"
+                  >
+                    <CornerDownRight
+                      :size="16"
+                      class="mt-3 shrink-0 text-text-muted"
+                    />
+                    <div class="min-w-0 flex-1">
+                      <textarea
+                        v-model="replyContent"
+                        rows="2"
+                        maxlength="2000"
+                        placeholder="Écrire une réponse..."
+                        class="w-full resize-y rounded-xl border border-border bg-bg px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                      ></textarea>
+                      <p v-if="replyError" class="mt-1 text-xs text-danger">
+                        {{ replyError }}
+                      </p>
+                      <div class="mt-2 flex justify-end">
+                        <button
+                          type="submit"
+                          :disabled="!replyContent.trim() || submittingReply"
+                          class="rounded-full bg-primary px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+                        >
+                          {{ submittingReply ? "Envoi..." : "Envoyer" }}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+
+                  <div
+                    v-if="comment.replies?.length"
+                    class="ml-2 mt-3 space-y-3 border-l-2 border-border pl-3"
+                  >
+                    <div
+                      v-for="reply in comment.replies"
+                      :key="reply.id"
+                      class="flex gap-2"
+                    >
+                      <div
+                        class="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-light text-[10px] font-bold text-primary"
+                      >
+                        <img
+                          v-if="reply.user?.image"
+                          :src="reply.user.image"
+                          :alt="reply.user?.name"
+                          class="h-full w-full object-cover"
+                        /><span v-else>{{ initials(reply.user?.name) }}</span>
+                      </div>
+                      <div class="min-w-0 flex-1 rounded-xl bg-bg px-3 py-2.5">
+                        <p class="mb-1 text-xs font-bold">
+                          {{ reply.user?.name ?? "Utilisateur" }}
+                        </p>
+                        <p
+                          class="whitespace-pre-line break-words text-xs leading-5"
+                        >
+                          {{ reply.content }}
+                        </p>
+                        <time class="mt-1 block text-[10px] text-text-muted">{{
+                          formatDate(reply.created_at)
+                        }}</time>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="py-8 text-center">
+              <div
+                class="mx-auto mb-3 flex size-11 items-center justify-center rounded-full bg-bg text-text-muted"
+              >
+                <MessageCircle :size="21" />
+              </div>
+              <p class="text-sm font-semibold">
+                Aucun commentaire pour le moment
+              </p>
+              <p class="mt-1 text-xs text-text-muted">
+                Soyez le premier à lancer la discussion.
+              </p>
+            </div>
           </div>
         </section>
-      </article>
+      </template>
     </div>
   </main>
 </template>
+
+<style scoped>
+.menu-action {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 0.625rem;
+  padding: 0.7rem 0.75rem;
+  text-align: left;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-main, inherit);
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+.menu-action:hover {
+  background: var(--bg, rgba(0, 0, 0, 0.04));
+}
+.menu-action:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+</style>

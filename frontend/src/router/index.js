@@ -1,12 +1,16 @@
 import { createRouter, createWebHistory } from "vue-router";
+import NProgress from "nprogress";
+import "nprogress/nprogress.css";
+
 import Article from "../views/Home.vue";
-import Show from "../views/Show.vue"; // adapte selon ton arborescence
+import Show from "../views/Show.vue";
 import CreateArticle from "../views/CreateArticle.vue";
-import EditArticle from "../views/EditArticle.vue"; // adapte selon ton arborescence
-import Register from "../views/Register.vue"
-import Login from "../views/Login.vue"
+import Register from "../views/Register.vue";
+import Login from "../views/Login.vue";
+
 const router = createRouter({
   history: createWebHistory(),
+
   routes: [
     {
       path: "/",
@@ -18,32 +22,53 @@ const router = createRouter({
       component: Article,
     },
     {
-      path: "/articles/:slug",
-      name: "articles.show",
-      component: Show, // adapte selon ton arborescence
-    },
-    {
       path: "/articles/create",
       name: "CreateArticle",
       component: CreateArticle,
     },
     {
-    path: '/articles/:slug/edit',
-    name: 'EditArticle',
-    component: () => import('../views/EditArticle.vue'),
-}
-,
-{
-  path:'/register',
-  name:'Register',
-  component:Register
-},
-{
-  path:'/login',
-  name:'Login',
-  component:Login
-}
+      path: "/articles/:slug/edit",
+      name: "EditArticle",
+      component: () => import("../views/EditArticle.vue"),
+    },
+    {
+      path: "/articles/:slug",
+      name: "articles.show",
+      component: Show,
+    },
+    {
+      path: "/register",
+      name: "Register",
+      component: Register,
+    },
+    {
+      path: "/login",
+      name: "Login",
+      component: Login,
+    },
   ],
+});
+
+// Configuration NProgress
+NProgress.configure({
+  showSpinner: false,
+  trickleSpeed: 200,
+  minimum: 0.08,
+});
+
+// Début de navigation
+router.beforeEach(() => {
+  NProgress.start();
+});
+
+// Fin de navigation
+router.afterEach(() => {
+  NProgress.done();
+});
+
+// Erreur de navigation
+router.onError(() => {
+  NProgress.done();
 });
 
 export default router;
