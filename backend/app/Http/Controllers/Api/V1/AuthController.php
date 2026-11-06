@@ -62,4 +62,27 @@ class AuthController
     {
         return response()->json($request->user());
     }
+
+
+    public function updateAvatar(Request $request)
+{
+    $request->validate([
+        'avatar' => 'required|image|mimes:jpeg,png,jpg,webp|max:2048',
+    ]);
+
+    $user = $request->user();
+
+    if ($request->hasFile('avatar')) {
+        // Enregistre dans storage/app/public/avatars
+        $path = $request->file('avatar')->store('avatars', 'public');
+        
+        $user->avatar = asset('storage/' . $path);
+        $user->save();
+    }
+
+    return response()->json([
+        'message' => 'Photo de profil mise à jour avec succès',
+        'avatar' => $user->avatar
+    ]);
+}
 }

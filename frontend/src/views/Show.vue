@@ -123,7 +123,7 @@ const shareArticle = async () => {
   try {
     if (navigator.share) {
       await navigator.share({
-        title: article.value?.title ?? "Publication NEXORA",
+        title: article.value?.title ?? "Publication LapIUT",
         url: window.location.href,
       });
     } else {
@@ -469,10 +469,10 @@ watch(() => route.params.slug, fetchArticle);
             >
           </div>
           <div class="mx-3 grid grid-cols-3 gap-1 py-1 sm:mx-5">
-             <!-- Appel du composant ReactionPicker -->
-            <ReactionPicker 
-              v-model="userReaction" 
-              @react="handleReactionChange" 
+            <!-- Appel du composant ReactionPicker -->
+            <ReactionPicker
+              v-model="userReaction"
+              @react="handleReactionChange"
             />
             <button
               type="button"
@@ -482,7 +482,6 @@ watch(() => route.params.slug, fetchArticle);
               <MessageCircle :size="19" />Commenter
             </button>
 
-           
             <button
               type="button"
               @click="shareArticle"

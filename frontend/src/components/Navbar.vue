@@ -4,7 +4,7 @@
 import { ref } from "vue";
 import { useAuthStore } from "../stores/authStore";
 import { useRouter, useRoute } from "vue-router";
-
+import logo from '@/assets/lapiut.jpeg'
 import {
   Layers,
   Menu,
@@ -67,14 +67,12 @@ const closeMenus = () => {
         class="flex items-center gap-2.5 shrink-0"
       >
         <div
-          class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-sm"
+          class="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-sm"
         >
-          <Layers :size="23" class="text-white" />
+         <img :src="logo" alt="Logo LapIUT">
         </div>
 
-        <span class="text-xl font-extrabold tracking-tight text-text-main">
-          NEXORA
-        </span>
+        
       </router-link>
 
       <!-- BARRE DE RECHERCHE -->

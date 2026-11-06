@@ -7,7 +7,7 @@ import Show from "../views/Show.vue";
 import CreateArticle from "../views/CreateArticle.vue";
 import Register from "../views/Register.vue";
 import Login from "../views/Login.vue";
-
+import Dashboard from "@/views/Dashboard.vue";
 const router = createRouter({
   history: createWebHistory(),
 
@@ -46,6 +46,12 @@ const router = createRouter({
       name: "Login",
       component: Login,
     },
+    {
+      path:"/dashboard",
+
+      name: "Dashboard",
+      component:Dashboard
+    }
   ],
 });
 

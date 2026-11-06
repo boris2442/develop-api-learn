@@ -1,4 +1,3 @@
-
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -6,11 +5,10 @@ import { useRouter } from 'vue-router'
 import { useArticleStore } from '../stores/articleStore.js'
 import { useAuthStore } from '../stores/authStore'
 
+import SidebarLeft from '../components/SidebarLeft.vue'
+import SidebarRight from '../components/SidebarRight.vue'
+
 import {
-  House,
-  UserRound,
-  Bookmark,
-  Compass,
   PenLine,
   MessageCircle,
   Heart,
@@ -19,8 +17,6 @@ import {
   Search,
   LoaderCircle,
   RefreshCw,
-  TrendingUp,
-  Users,
   Image as ImageIcon
 } from '@lucide/vue'
 
@@ -44,7 +40,6 @@ const observer = ref(null)
 
 const filteredArticles = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
-
   if (!query) return articles.value
 
   return articles.value.filter(article =>
@@ -54,15 +49,29 @@ const filteredArticles = computed(() => {
   )
 })
 
+const uniqueCategories = computed(() => {
+  const categoriesMap = new Map()
+  articles.value.forEach(article => {
+    if (article.category?.id && article.category?.name) {
+      categoriesMap.set(article.category.id, article.category)
+    }
+  })
+  return Array.from(categoriesMap.values())
+})
+
+const topDiscussedArticles = computed(() => {
+  return [...articles.value]
+    .sort((a, b) => (b.comments_count || 0) - (a.comments_count || 0))
+    .slice(0, 3)
+})
+
 const toggleLike = (id) => {
   const updated = new Set(likedArticles.value)
-
   if (updated.has(id)) {
     updated.delete(id)
   } else {
     updated.add(id)
   }
-
   likedArticles.value = updated
 }
 
@@ -91,11 +100,8 @@ const refreshFeed = async () => {
 
 const formatDate = (date) => {
   if (!date) return ''
-
   const parsedDate = new Date(date)
-
   if (Number.isNaN(parsedDate.getTime())) return ''
-
   return new Intl.DateTimeFormat('fr-FR', {
     day: 'numeric',
     month: 'short',
@@ -126,11 +132,7 @@ onMounted(async () => {
         loadMore()
       }
     },
-    {
-      root: null,
-      rootMargin: '300px',
-      threshold: 0
-    }
+    { root: null, rootMargin: '300px', threshold: 0 }
   )
 
   if (observerTarget.value) {
@@ -146,94 +148,13 @@ onUnmounted(() => {
 <template>
   <main class="min-h-screen mt-[122px] bg-bg text-text-main">
 
-    <div class="mx-auto grid max-w-[1440px] grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-[250px_minmax(0,680px)] lg:justify-center lg:gap-8 lg:px-8">
+    <!-- Grille principale à 3 colonnes -->
+    <div class="mx-auto grid max-w-[1440px] grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-[250px_minmax(0,680px)_300px] lg:justify-center lg:gap-8 lg:px-8">
 
-      <!-- SIDEBAR -->
-      <aside class="hidden lg:block">
-        <div class="sticky top-[146px] space-y-6">
+      <!-- SIDEBAR GAUCHE (Composant) -->
+      <SidebarLeft :user="authStore.user" />
 
-          <!-- PROFIL -->
-          <div class="flex items-center gap-3 rounded-xl p-3">
-            <div class="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary-light font-bold text-primary">
-              {{ getInitials(authStore.user?.name) }}
-            </div>
-
-            <div class="min-w-0">
-              <p class="truncate text-sm font-semibold">
-                {{ authStore.user?.name ?? 'Bienvenue sur NEXORA' }}
-              </p>
-              <p class="text-xs text-text-muted">
-                {{ authStore.user ? 'Mon profil' : 'Communauté NEXORA' }}
-              </p>
-            </div>
-          </div>
-
-          <!-- NAVIGATION -->
-          <nav class="space-y-1">
-
-            <router-link
-              to="/"
-              class="flex items-center gap-3 rounded-xl bg-primary-light px-4 py-3 text-sm font-semibold text-primary transition hover:bg-primary-light"
-            >
-              <House :size="20" />
-              Fil d'actualité
-            </router-link>
-
-            <router-link
-              to="/"
-              class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-text-muted transition hover:bg-primary-light hover:text-primary"
-            >
-              <Compass :size="20" />
-              Découvrir
-            </router-link>
-
-            <router-link
-              v-if="authStore.user"
-              :to="{ name: 'CreateArticle' }"
-              class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-text-muted transition hover:bg-primary-light hover:text-primary"
-            >
-              <PenLine :size="20" />
-              Créer un article
-            </router-link>
-
-            <router-link
-              to="/"
-              class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-text-muted transition hover:bg-primary-light hover:text-primary"
-            >
-              <Bookmark :size="20" />
-              Enregistrés
-            </router-link>
-
-          </nav>
-
-          <div class="border-t border-border pt-5">
-            <p class="mb-3 px-3 text-xs font-bold tracking-wider text-text-light">
-              COMMUNAUTÉ
-            </p>
-
-            <div class="space-y-1">
-              <div class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-text-muted">
-                <Users :size="20" />
-                Communauté
-              </div>
-
-              <div class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-text-muted">
-                <TrendingUp :size="20" />
-                Tendances
-              </div>
-            </div>
-          </div>
-
-          <div class="px-3 pt-4 text-xs leading-5 text-text-light">
-            <p class="font-extrabold tracking-wider text-primary">NEXORA</p>
-            Une communauté de partage et de connaissances.
-          </div>
-
-        </div>
-      </aside>
-
-
-      <!-- FEED -->
+      <!-- FEED CENTRAL -->
       <section class="min-w-0">
 
         <!-- HEADER -->
@@ -540,6 +461,14 @@ onUnmounted(() => {
         </template>
 
       </section>
+
+
+      <!-- SIDEBAR DROITE (Composant) -->
+      <SidebarRight 
+        :categories="uniqueCategories" 
+        :topArticles="topDiscussedArticles" 
+        @openArticle="openArticle" 
+      />
 
     </div>
   </main>

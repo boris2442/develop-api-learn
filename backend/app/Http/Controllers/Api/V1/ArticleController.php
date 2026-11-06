@@ -6,6 +6,7 @@ use App\Http\Requests\ArticleStoreRequest;
 use App\Http\Requests\ArticleUpdateRequest;
 use App\Http\Resources\ArticleResource;
 use App\Models\Article;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -18,7 +19,7 @@ class ArticleController
         $articles = Article::with(['user', 'category'])
             ->withCount('comments')
             ->inRandomOrder()
-            // ->orderByRaw('CRC32(CONCAT(id, ?))', ['nexora-feed'])
+            // ->orderByRaw('CRC32(CONCAT(id, ?))', ['LapIUT-feed'])
             ->paginate(10);
 
      return ArticleResource::collection($articles);
@@ -111,4 +112,17 @@ public function update(ArticleUpdateRequest $request, Article $article)
     return new ArticleResource($article);
 }
 
+
+
+// Dans votre ArticleController.php (Optionnel si vous filtrez déjà dans le store)
+public function myArticles(Request $request)
+{
+    $articles = Article::with(['user', 'category'])
+        ->where('user_id', $request->user()->id)
+        ->withCount('comments')
+        ->latest()
+        ->paginate(10);
+
+    return ArticleResource::collection($articles);
+}
 }

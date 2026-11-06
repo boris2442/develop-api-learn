@@ -41,3 +41,15 @@ Route::get('/articles/{article:slug}', [ArticleController::class, 'show']);
 Route::put('/articles/{article:slug}', [ArticleController::class, 'update']);
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::post('/articles/{article}/comments', [CommentController::class, 'store']);
+
+
+// Routes protégées par l'authentification (Sanctum / Passport)
+Route::middleware('auth:sanctum')->group(function () {
+    
+    // Route pour supprimer un article (avec vérification que l'utilisateur en est l'auteur)
+    Route::delete('/articles/{article}', [ArticleController::class, 'destroy']);
+
+    // Route pour mettre à jour la photo de profil (avatar)
+    Route::post('/user/avatar', [AuthController::class, 'updateAvatar']);
+    
+});
